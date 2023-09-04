@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "astute-vision-retail-tracking"
+version = "0.1.0"
+description = ""
+authors = ["arkadiysotnikov <cotnikoarkady@gmail.com>"]
+readme = "README.md"
+packages = [{include = "astute_vision_retail_tracking"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+opencv-python = "^4.8.0.76"
+ultralytics = "^8.0.169"
+labelme = "^5.3.1"
+pyqt5 = "^5.15.9"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
