@@ -8,7 +8,7 @@ from config import PATH_TO_VIDEO
 from ultralytics import YOLO
 
 # Load the YOLOv8 model
-model = YOLO('yolov8x.pt')
+model = YOLO('yolov8n-pose.pt')
 
 # Open the video file
 cap = cv2.VideoCapture(PATH_TO_VIDEO)
@@ -29,7 +29,6 @@ flag = False
 while cap.isOpened():
     # Read a frame from the video
     success, frame = cap.read()
-    counter += 1
     if counter >= 164:
         break
     if success:
@@ -39,12 +38,11 @@ while cap.isOpened():
         # Get the boxes and track IDs
         boxes = results[0].boxes.xywh.cpu()
         track_ids = results[0].boxes.id.int().cpu().tolist()
+        keypoints = results[0].keypoints.xy.cpu()
+        # print(keypoints)
 
         # Plot the tracks
         for box, track_id in zip(boxes, track_ids):
-            # fixme Only plot the track for the person with ID 5 for this example
-            if track_id != 5:
-                continue
             x, y, w, h = box
             track = track_history[track_id]
             track.append((float(x), float(y)))  # x, y center point
@@ -85,10 +83,12 @@ while cap.isOpened():
         # Display the annotated frame
         cv2.imshow("YOLOv8 Tracking", frame)
         video_writer.write(frame)
+        counter += 1
 
         # Break the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
+
     else:
         # Break the loop if the end of the video is reached
         break
