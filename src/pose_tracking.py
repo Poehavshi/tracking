@@ -46,7 +46,7 @@ while cap.isOpened():
                 cv2.circle(frame, (int(x), int(y)), 3, colors[j], -1)
         # estimate person orientation by keypoints 5 and 6
         for box, track_id in zip(boxes, track_ids):
-        cv2.imshow("YOLOv8 Tracking", frame)
+            cv2.imshow("YOLOv8 Tracking", frame)
         counter += 1
 
         # Break the loop if 'q' is pressed

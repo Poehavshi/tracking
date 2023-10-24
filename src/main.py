@@ -3,87 +3,67 @@ import json
 
 import cv2
 import numpy as np
-from config import PATH_TO_VIDEO
-
 from ultralytics import YOLO
 
-# Load the YOLOv8 model
-model = YOLO('yolov8n-pose.pt')
+# init the YOLOv8 model
+model = YOLO('yolov8n.pt')
 
-# Open the video file
-cap = cv2.VideoCapture(PATH_TO_VIDEO)
-width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-fps = cap.get(cv2.CAP_PROP_FPS)
-video_writer = cv2.VideoWriter("/Users/arkadiysotnikov/PycharmProjects/astute-vision-retail-tracking/data/output.avi",
-                               cv2.VideoWriter_fourcc(*'MJPG'), fps, (width, height))
+
+# create two video captures for each camera
+def open_annotations(path_to_annotations):
+    with open(path_to_annotations) as file:
+        zones_json = json.load(file)
+        return {shape["label"]: np.array(shape["points"], dtype=np.int32) for shape in zones_json["shapes"]}
+
+
+directory_with_videos = "/Users/arkadiysotnikov/PycharmProjects/astute-vision-retail-tracking/data"
+video_captures = [cv2.VideoCapture(f"{directory_with_videos}/{i}.mp4") for i in range(1, 3)]
+zones = [open_annotations(f"{directory_with_videos}/{i}.json") for i in range(1, 3)]
+
+
+while video_captures[1].isOpened() and video_captures[1].get(cv2.CAP_PROP_POS_FRAMES) < 30:
+    success, frame = video_captures[1].read()
+
 
 # Store the track history
 track_history = defaultdict(lambda: [])
-counter = 0
-with open("/Users/arkadiysotnikov/PycharmProjects/astute-vision-retail-tracking/data/first_frame.json") as f:
-    first_frame = json.load(f)
-    zones = {shape["label"] : shape["points"] for shape in first_frame["shapes"]}
 flag = False
-# Loop through the video frames
-while cap.isOpened():
-    # Read a frame from the video
-    success, frame = cap.read()
-    if counter >= 164:
-        break
-    if success:
+# Loop over the frames of the all videos
+while True:
+    success, frames = zip(*[cap.read() for cap in video_captures])
+    if all(success):
         # Run YOLOv8 tracking on the frame, persisting tracks between frames
-        results = model.track(frame, persist=True, classes=[0])
+        results = model.track(frames, persist=True, classes=[0])
+        for i, camera_result in enumerate(results):
+            if camera_result.boxes is None or camera_result.boxes.id is None:
+                continue
+            # draw bbox with track id
+            boxes = camera_result.boxes.xywh.cpu()
+            track_ids = camera_result.boxes.id.int().cpu().tolist()
+            for box, track_id in zip(boxes, track_ids):
+                x, y, w, h = box
+                # get upper center point
+                x_up_left = x
+                y_up_left = y - h / 2
+                track = track_history[track_id]
+                track.append((float(x_up_left), float(y_up_left)))
+                if len(track) > 30:
+                    track.pop(0)
+                if len(track) > 2:
+                    dx = track[-1][0] - track[-2][0]
+                    dy = track[-1][1] - track[-2][1]
+                    direction = np.arctan2(dy, dx)
+                    velocity = np.sqrt(dx ** 2 + dy ** 2)
+                    if velocity < 1.3:
+                        continue
+                    cv2.arrowedLine(frames[i], (int(x), int(y)),
+                                    (int(x + 2 * 30 * np.cos(direction)), int(y + 2 * 30 * np.sin(direction))),
+                                    (0, 255, 0), 2)
+                    cv2.putText(frames[i], str(track_id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
-        # Get the boxes and track IDs
-        boxes = results[0].boxes.xywh.cpu()
-        track_ids = results[0].boxes.id.int().cpu().tolist()
-        keypoints = results[0].keypoints.xy.cpu()
-        # print(keypoints)
-
-        # Plot the tracks
-        for box, track_id in zip(boxes, track_ids):
-            x, y, w, h = box
-            track = track_history[track_id]
-            track.append((float(x), float(y)))  # x, y center point
-            if len(track) > 30:  # retain 90 tracks for 90 frames
-                track.pop(0)
-            # get velocity of the track to get known direction
-            if len(track) > 2:
-                dx = track[-1][0] - track[-2][0]
-                dy = track[-1][1] - track[-2][1]
-                direction = np.arctan2(dy, dx)
-                velocity = np.sqrt(dx ** 2 + dy ** 2)
-                cv2.arrowedLine(frame, (int(x), int(y)),
-                                (int(x + 2 * velocity * np.cos(direction)), int(y + 2 * velocity * np.sin(direction))),
-                                (0, 0, 255), 2)
-                direction_deg = np.rad2deg(direction)
-                if velocity > 3 and (direction_deg > 45 and direction_deg < 135):
-                    flag = True
-            # Draw the tracking lines
-            points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
-            cv2.polylines(frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
-            # draw bbox
-            cv2.rectangle(frame, (int(x - w / 2), int(y - h / 2)), (int(x + w / 2), int(y + h / 2)), (0, 0, 255), 2)
-            # draw ID
-            cv2.putText(frame, str(track_id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-
-        # Draw the zones
-        for zone_name, points in zones.items():
-            points = np.array(points, dtype=np.int32)
-            # if person is in the zone, draw it in green
-            if cv2.pointPolygonTest(points, (int(x), int(y)), False) >= 0:
-                cv2.polylines(frame, [points], isClosed=True, color=(0, 255, 0), thickness=2)
-                # draw text that shows the zone name in the top left corner of the frame
-                cv2.putText(frame, zone_name, (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
-                if flag:
-                    cv2.putText(frame, "On the left side", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
-                else:
-                    cv2.putText(frame, "Behind", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
-        # Display the annotated frame
-        cv2.imshow("YOLOv8 Tracking", frame)
-        video_writer.write(frame)
-        counter += 1
+        # # Display the annotated frame
+        cv2.imshow("Astute Vision 1", frames[0])
+        cv2.imshow("Astute Vision 2", frames[1])
 
         # Break the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -94,6 +74,6 @@ while cap.isOpened():
         break
 
 # Release the video capture object and close the display window
-cap.release()
+for cap in video_captures:
+    cap.release()
 cv2.destroyAllWindows()
-video_writer.release()
