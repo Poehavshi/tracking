@@ -50,8 +50,8 @@ while True:
                 # get the down left corner
                 cv2.rectangle(frames[i], (int(x - w / 2), int(y - h / 2)), (int(x + w / 2), int(y + h / 2)),
                               (0, 255, 0), 2)
-                x_down_left = x - w / 2
-                y_down_left = y + h / 2
+                x_down_left = x - w / 4
+                y_down_left = y + h / 4
                 cv2.circle(frames[i], (int(x_down_left), int(y_down_left)), 3, (0, 255, 0), -1)
                 track = track_history[track_id]
                 track.append((float(x_down_left), float(y_down_left)))
@@ -67,7 +67,7 @@ while True:
                     cv2.arrowedLine(frames[i], (int(x), int(y)),
                                     (int(x + 2 * 30 * np.cos(direction)), int(y + 2 * 30 * np.sin(direction))),
                                     (0, 255, 0), 2)
-                    cv2.putText(frames[i], str(track_id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    cv2.putText(frames[i], str(1), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             for zone_name, points in zones[i].items():
                 points = np.array(points, dtype=np.int32)
                 # if person is in the zone, draw it in green
