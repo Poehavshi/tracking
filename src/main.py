@@ -4,9 +4,14 @@ import json
 import cv2
 import numpy as np
 from ultralytics import YOLO
+import torch
 
 # init the YOLOv8 model
+device: str = "cuda" if torch.cuda.is_available() else "cpu"
+print(device)
+
 model = YOLO('yolov8n.pt')
+model.to('cuda')
 
 
 # create two video captures for each camera
@@ -16,7 +21,7 @@ def open_annotations(path_to_annotations):
         return {shape["label"]: np.array(shape["points"], dtype=np.int32) for shape in zones_json["shapes"]}
 
 
-directory_with_videos = "/Users/arkadiysotnikov/PycharmProjects/astute-vision-retail-tracking/data"
+directory_with_videos = r"D:\tracking-poc\data"
 video_captures = [cv2.VideoCapture(f"{directory_with_videos}/{i}.mp4") for i in range(1, 3)]
 zones = [open_annotations(f"{directory_with_videos}/{i}.json") for i in range(1, 3)]
 
@@ -42,28 +47,43 @@ while True:
             track_ids = camera_result.boxes.id.int().cpu().tolist()
             for box, track_id in zip(boxes, track_ids):
                 x, y, w, h = box
-                # get upper center point
-                x_up_left = x
-                y_up_left = y - h / 2
+                # get the down left corner
+                cv2.rectangle(frames[i], (int(x - w / 2), int(y - h / 2)), (int(x + w / 2), int(y + h / 2)),
+                              (0, 255, 0), 2)
+                x_down_left = x - w / 2
+                y_down_left = y + h / 2
+                cv2.circle(frames[i], (int(x_down_left), int(y_down_left)), 3, (0, 255, 0), -1)
                 track = track_history[track_id]
-                track.append((float(x_up_left), float(y_up_left)))
+                track.append((float(x_down_left), float(y_down_left)))
                 if len(track) > 30:
                     track.pop(0)
                 if len(track) > 2:
                     dx = track[-1][0] - track[-2][0]
                     dy = track[-1][1] - track[-2][1]
                     direction = np.arctan2(dy, dx)
-                    velocity = np.sqrt(dx ** 2 + dy ** 2)
+                    velocity = np.sqrt(dx**2 + dy**2)
                     if velocity < 1.3:
                         continue
                     cv2.arrowedLine(frames[i], (int(x), int(y)),
                                     (int(x + 2 * 30 * np.cos(direction)), int(y + 2 * 30 * np.sin(direction))),
                                     (0, 255, 0), 2)
                     cv2.putText(frames[i], str(track_id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-
+            for zone_name, points in zones[i].items():
+                points = np.array(points, dtype=np.int32)
+                # if person is in the zone, draw it in green
+                if cv2.pointPolygonTest(points, (int(x_down_left), int(y_down_left)), False) >= 0:
+                    # draw text that shows the zone name in the top left corner of the frame
+                    cv2.putText(frames[i], zone_name, (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
+                    if flag:
+                        cv2.putText(frames[i], "Near", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0),
+                                    2)
+                    else:
+                        cv2.putText(frames[i], "Near", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
         # # Display the annotated frame
-        cv2.imshow("Astute Vision 1", frames[0])
-        cv2.imshow("Astute Vision 2", frames[1])
+        resized_frame_0 = cv2.resize(frames[0], (640, 640))
+        resized_frame_1 = cv2.resize(frames[1], (640, 640))
+        cv2.imshow("Astute Vision 1", resized_frame_0)
+        cv2.imshow("Astute Vision 2", resized_frame_1)
 
         # Break the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord("q"):

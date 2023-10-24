@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "astute_vision_retail_tracking"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 opencv-python = "^4.8.0.76"
 ultralytics = "^8.0.169"
 labelme = "^5.3.1"
