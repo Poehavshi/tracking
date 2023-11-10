@@ -42,11 +42,15 @@ while True:
             track_ids = camera_result.boxes.id.int().cpu().tolist()
             for box, track_id in zip(boxes, track_ids):
                 x, y, w, h = box
-                # get upper center point
-                x_up_left = x
-                y_up_left = y - h / 2
+                # draw bbox
+                cv2.rectangle(frames[i], (int(x - w / 2), int(y - h / 2)), (int(x + w / 2), int(y + h / 2)), (0, 255, 0), 2)
+                # get the down left corner
+                x_down_left = x - w / 2
+                y_down_left = y - h / 2
+                # draw x_down_left, y_down_left
+                cv2.circle(frames[i], (int(x_down_left), int(y_down_left)), 3, (0, 255, 0), -1)
                 track = track_history[track_id]
-                track.append((float(x_up_left), float(y_up_left)))
+                track.append((float(x_down_left), float(y_down_left)))
                 if len(track) > 30:
                     track.pop(0)
                 if len(track) > 2:
@@ -60,6 +64,17 @@ while True:
                                     (int(x + 2 * 30 * np.cos(direction)), int(y + 2 * 30 * np.sin(direction))),
                                     (0, 255, 0), 2)
                     cv2.putText(frames[i], str(track_id), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            for zone_name, points in zones[i].items():
+                points = np.array(points, dtype=np.int32)
+                # if person is in the zone, draw it in green
+                if cv2.pointPolygonTest(points, (int(x), int(y)), False) >= 0:
+                    cv2.polylines(frames[i], [points], isClosed=True, color=(0, 255, 0), thickness=2)
+                    # draw text that shows the zone name in the top left corner of the frame
+                    cv2.putText(frames[i], zone_name, (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
+                    if flag:
+                        cv2.putText(frames[i], "On the left side", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
+                    else:
+                        cv2.putText(frames[i], "Behind", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
 
         # # Display the annotated frame
         cv2.imshow("Astute Vision 1", frames[0])
